@@ -5185,11 +5185,11 @@ void loop_wifi_mqtt_mode(void){
             Serial.println(F("Error: Failed to publish CO2."));                    
           }
           else{
-            updateLCD(co2_ppm, 5, 1, 3);  
+            updateLCD(co2_ppm, 5, 1, 5);  
           }
         }
         else{
-          updateLCD("---", 5, 1, 3); 
+          updateLCD("---", 5, 1, 5); 
         }            
       }
       else{
