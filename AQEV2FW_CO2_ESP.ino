@@ -1025,7 +1025,19 @@ void initializeHardware(void) {
   updateLCD("CO2", 0);
   updateLCD("MODEL", 1);
   SUCCESS_MESSAGE_DELAY();
-  
+
+
+  // this seems to be necessary
+  // for CO2 software serial to work
+  // must be some source of constructor
+  pinMode(9, INPUT_PULLUP);
+  pinMode(10, OUTPUT);  
+
+  // put the same thing in for the GPS pins 
+  // just to be on the safe side
+  pinMode(18, INPUT_PULLUP);
+  pinMode(17, OUTPUT);
+    
 }
 
 /****** CONFIGURATION SUPPORT FUNCTIONS ******/
@@ -4971,13 +4983,16 @@ void addSample(uint8_t sample_type, float value){
 void collectCO2(void){    
   co2Serial.begin(9600);
   clearCO2SerialInput();
-  
+
+  //Serial.print("CO2:");
   if(requestCO2Data(&instant_co2_ppm)){      
+    //Serial.print(instant_co2_ppm, 1);
     addSample(CO2_SAMPLE_BUFFER, instant_co2_ppm);   
     if(sample_buffer_idx == (sample_buffer_depth - 1)){
       co2_ready = true;
     }
   }
+  //Serial.println();
   
   co2Serial.end();  
 }
@@ -5018,6 +5033,9 @@ void co2_convert_to_ppm(float average, float * converted_value, float * temperat
 
   // TODO: if we find there are temperature effects to compensate for, calculate parameters for compensation here
   // TODO: apply compensation formula using temperature dependant parameters here
+
+  // there's no interpretation needed for this sensor, we don't actually have any "raw" data
+  *converted_value = average; 
   
   *temperature_compensated_value = *converted_value; // no compensation yet
   if(*temperature_compensated_value <= 0.0f){
@@ -5032,9 +5050,9 @@ boolean publishCO2(){
   co2_convert_to_ppm(co2_moving_average, &converted_value, &compensated_value);
   co2_ppm = compensated_value;  
   //safe_dtostrf(co2_moving_average, -8, 5, raw_value_string, 16);
-  safe_dtostrf(converted_value, -4, 2, converted_value_string, 16);
-  safe_dtostrf(compensated_value, -4, 2, compensated_value_string, 16); 
-  safe_dtostrf(instant_co2_ppm, -8, 5, raw_instant_value_string, 16);
+  safe_dtostrf(converted_value, -8, 0, converted_value_string, 16);
+  safe_dtostrf(compensated_value, -8, 0, compensated_value_string, 16); 
+  safe_dtostrf(instant_co2_ppm, -8, 0, raw_instant_value_string, 16);
   
   //trim_string(raw_value_string);
   trim_string(converted_value_string);
@@ -5057,6 +5075,7 @@ boolean publishCO2(){
     "%s"
     "}",
     mqtt_client_id,    
+    raw_instant_value_string,
     converted_value_string, 
     compensated_value_string,
     gps_mqtt_string);  
@@ -5301,8 +5320,8 @@ void printCsvDataLine(){
     co2_convert_to_ppm(co2_moving_average, &converted_value, &compensated_value);
     co2_ppm = compensated_value;        
     
-    Serial.print(co2_moving_average, 3);
-    appendToString(co2_moving_average, 3, dataString, &dataStringRemaining);    
+    Serial.print(co2_moving_average, 0);
+    appendToString(co2_moving_average, 0, dataString, &dataStringRemaining);    
   }
   else{
     Serial.print(F("---"));
