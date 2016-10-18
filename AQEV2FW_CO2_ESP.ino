@@ -89,7 +89,8 @@ unsigned long gps_age = TinyGPS::GPS_INVALID_AGE;
 #define CO2_SAMPLE_BUFFER         (0)
 #define TEMPERATURE_SAMPLE_BUFFER (1)
 #define HUMIDITY_SAMPLE_BUFFER    (2)
-float sample_buffer[3][MAX_SAMPLE_BUFFER_DEPTH] = {0};
+#define NUM_SAMPLE_BUFFERS        (3)
+float sample_buffer[NUM_SAMPLE_BUFFERS][MAX_SAMPLE_BUFFER_DEPTH] = {0};
 uint16_t sample_buffer_idx = 0;
 
 uint32_t sampling_interval = 0;    // how frequently the sensorss are sampled
@@ -435,7 +436,7 @@ const uint8_t heartbeat_waveform[NUM_HEARTBEAT_WAVEFORM_SAMPLES] PROGMEM = {
 };
 uint8_t heartbeat_waveform_index = 0;
 
-char scratch[512] = { 0 };  // scratch buffer, for general use
+char scratch[1024] = { 0 };  // scratch buffer, for general use
 #define ESP8266_INPUT_BUFFER_SIZE (1500)
 uint8_t esp8266_input_buffer[ESP8266_INPUT_BUFFER_SIZE] = {0};     // sketch must instantiate a buffer to hold incoming data
                                                                    // 1500 bytes is way overkill for MQTT, but if you have it, may as well
@@ -4705,7 +4706,7 @@ void clearTempBuffers(void){
   memset(compensated_value_string, 0, 64);
   memset(raw_instant_value_string, 0, 64);  
   memset(raw_value_string, 0, 64);
-  memset(scratch, 0, 512);
+  memset(scratch, 0, 1024);
   memset(MQTT_TOPIC_STRING, 0, 128);
 }
 
@@ -4841,7 +4842,7 @@ boolean publishHeartbeat(){
   static uint32_t post_counter = 0;  
   uint8_t sample = pgm_read_byte(&heartbeat_waveform[heartbeat_waveform_index++]);
   
-  snprintf(scratch, 511, 
+  snprintf(scratch, 1023, 
   "{"
   "\"serial-number\":\"%s\","
   "\"converted-value\":%d,"
@@ -4894,7 +4895,7 @@ boolean publishTemperature(){
   replace_nan_with_null(raw_value_string);
   replace_nan_with_null(raw_instant_value_string);
   
-  snprintf(scratch, 511,
+  snprintf(scratch, 1023,
     "{"
     "\"serial-number\":\"%s\","
     "\"converted-value\":%s,"
@@ -4944,7 +4945,7 @@ boolean publishHumidity(){
   replace_nan_with_null(raw_value_string);
   replace_nan_with_null(raw_instant_value_string);
   
-  snprintf(scratch, 511, 
+  snprintf(scratch, 1023, 
     "{"
     "\"serial-number\":\"%s\","    
     "\"converted-value\":%s,"
@@ -5060,7 +5061,7 @@ void advanceSampleBufferIndex(void){
 }
 
 void addSample(uint8_t sample_type, float value){
-  if((sample_type < 4) && (sample_buffer_idx < MAX_SAMPLE_BUFFER_DEPTH)){
+  if((sample_type < NUM_SAMPLE_BUFFERS) && (sample_buffer_idx < MAX_SAMPLE_BUFFER_DEPTH)){
     sample_buffer[sample_type][sample_buffer_idx] = value;    
   }
 }
@@ -5150,7 +5151,7 @@ boolean publishCO2(){
   replace_nan_with_null(compensated_value_string);
   replace_nan_with_null(raw_instant_value_string);
   
-  snprintf(scratch, 511, 
+  snprintf(scratch, 1023, 
     "{"
     "\"serial-number\":\"%s\","   
     "\"raw-instant-value\":%s,"    
@@ -5619,8 +5620,8 @@ void downloadFile(char * hostname, uint16_t port, char * filename, void (*respon
   */ 
   esp.connect(hostname, port);
   if (esp.connected()) {   
-    memset(scratch, 0, 512);
-    snprintf(scratch, 511, "GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n\r\n", filename, hostname);        
+    memset(scratch, 0, 1024);
+    snprintf(scratch, 1023, "GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n\r\n", filename, hostname);        
     esp.print(scratch);
     //Serial.print(scratch);    
   } else {
