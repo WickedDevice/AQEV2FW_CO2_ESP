@@ -6243,7 +6243,8 @@ boolean requestCO2Data(float * co2_ppm){
   uint8_t readCO2[] = {0xFE, 0x44, 0x00, 0x08, 0x02, 0x9F, 0x25};  // Command packet to read Co2 (see app note)
   uint8_t response[] = {0,0,0,0,0,0,0};                            // Create an array to store the response    
   // try up to retry times
-  const uint8_t retries = 5;
+  const uint8_t retries = sizeof(readCO2);
+  
   for(uint8_t ii = 0; ii < retries; ii++){
     if(co2SendRequest(readCO2)){                  
       // there is the beginning of a response at least
@@ -6254,19 +6255,34 @@ boolean requestCO2Data(float * co2_ppm){
           *co2_ppm = co2GetValue(response);
           return true;
         }
-      }
+      }  
     }
-  }
 
+    // attempt to re-synchronize
+    Serial.println(F("Info: Attempting to resynchronize with CO2 sensor"));
+    for(uint8_t jj = 0; jj <= ii; jj++){
+      // send out a variable number of padding bytes in order to brute-force resynchronize the sensor
+      // eventually the request message should be received by the sensor correctly
+      co2Serial.write(0xff);
+    }
+    
+  }
+  
+  Serial.print(F("Warning: Failed to collect CO2 Data"));
   return false;
 }
 
 // sends the request command 
 // returns true the sensor starts responding within 50ms
-boolean co2SendRequest(uint8_t * request){ 
+boolean co2SendRequest(uint8_t * request){   
+  // before sending the command, take some steps
+  // to ensure that that the input buffer is empty
+  delay(50);
+  co2Serial.flush();  
+  
   co2Serial.write(request, 7);
   unsigned long start = millis();
-  const long timeout_interval = 50;
+  const long timeout_interval = 50;  
 
   while(1){
     unsigned long currentMillis = millis();
@@ -6325,10 +6341,16 @@ uint16_t co2GetValue(uint8_t * response){
 boolean co2ValidResponse(uint8_t * response){
   uint16_t crc = response[6] * 256 + response[5];
   if(co2_CRC16(response, 5) != crc){
+    Serial.print(F("Warning: CO2 Sensor CRC check failed"));    
+    Serial.println();    
     return false;
   }
 
   if(co2GetValue(response) > 10000){
+    Serial.print(F("Warning: CO2 Sensor reported "));
+    Serial.print(co2GetValue(response));
+    Serial.print(F("ppm > 10000ppm"));
+    Serial.println();
     return false;
   }
 
