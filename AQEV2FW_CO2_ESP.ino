@@ -5079,6 +5079,11 @@ void collectCO2(void){
       co2_ready = true;
     }
   }
+  else{
+    Serial.println(F("Error: Failed to communicate with CO2 sensor, restarting"));
+    Serial.flush();
+    watchdogForceReset();
+  }
   //Serial.println();
   
   co2Serial.end();  
@@ -6278,7 +6283,7 @@ boolean co2SendRequest(uint8_t * request){
   // before sending the command, take some steps
   // to ensure that that the input buffer is empty
   delay(50);
-  co2Serial.flush();  
+  clearCO2SerialInput();
   
   co2Serial.write(request, 7);
   unsigned long start = millis();
