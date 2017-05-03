@@ -890,6 +890,7 @@ void setup() {
 
 void loop() {
   current_millis = millis();
+  static boolean first = true;
 
   // whenever you come through loop, process a GPS byte if there is one
   // will need to test if this keeps up, but I think it will
@@ -912,6 +913,11 @@ void loop() {
         break;
       }
     }
+  }
+
+  if(first && !gps_installed){
+    first = false;
+    updateGpsStrings();
   }
 
   if(current_millis - previous_sensor_sampling_millis >= sampling_interval){
