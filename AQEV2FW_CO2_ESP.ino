@@ -1233,7 +1233,11 @@ void initializeNewConfigSettings(void){
     }
 
     configInject("softap enable\r");
-    configInject("sampling 5, 60, 60\r");
+
+    // only apply the sampling update to CO2 eggs if their sampling interval is currently 5 seconds
+    if(eeprom_read_word((uint16_t * ) EEPROM_SAMPLING_INTERVAL) == 5){       
+      configInject("sampling 5, 60, 60\r");
+    }
     eeprom_write_byte((uint8_t *) EEPROM_2_2_0_SAMPLING_UPD, 1);
 
     // check if ntpsrv is pool.ntp.org, and if so, switch it to 0.airqualityegg.pool.ntp.org
