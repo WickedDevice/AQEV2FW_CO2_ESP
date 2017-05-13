@@ -473,7 +473,7 @@ const uint8_t heartbeat_waveform[NUM_HEARTBEAT_WAVEFORM_SAMPLES] PROGMEM = {
 };
 uint8_t heartbeat_waveform_index = 0;
 
-#define SCRATCH_BUFFER_SIZE (1024)
+#define SCRATCH_BUFFER_SIZE (512)
 char scratch[SCRATCH_BUFFER_SIZE] = { 0 };  // scratch buffer, for general use
 uint16_t scratch_idx = 0;
 #define ESP8266_INPUT_BUFFER_SIZE (1500)
@@ -6518,7 +6518,7 @@ void doSoftApModeConfigBehavior(void){
     // if it's in the white list allow it
     boolean in_whitelist = false;
     for(uint8_t jj = 0; jj < sizeof(whitelist); jj++){
-      char wl_char = pgm_read_byte(&(whitelist[jj]));
+      char wl_char = pgm_read_byte(&(whitelist[jj])); 
       if(wl_char == c){
         in_whitelist = true;
         break;
@@ -6559,7 +6559,7 @@ void doSoftApModeConfigBehavior(void){
         const long interval = 1000;
         boolean got_opening_brace = false;
         boolean got_closing_brace = false;
-
+        
         while((seconds_remaining_in_softap_mode != 0) && (!explicit_exit_softap)){
           unsigned long currentMillis = millis();
 
@@ -6593,11 +6593,16 @@ void doSoftApModeConfigBehavior(void){
 
           // pay attention to incoming traffic
           while(esp.available()){
-            char c = esp.read();
+            char c = esp.read();            
             if(got_opening_brace){
               if(c == '}'){
                 got_closing_brace = true;
-                scratch[scratch_idx++] = c;
+                if(scratch_idx < SCRATCH_BUFFER_SIZE - 1){
+                  scratch[scratch_idx++] = c;
+                }
+                else{
+                  Serial.println("Warning: scratch buffer out of memory");
+                }
                 break;
               }
               else{
@@ -6611,7 +6616,12 @@ void doSoftApModeConfigBehavior(void){
             }
             else if(c == '{'){
               got_opening_brace = true;
-              scratch[scratch_idx++] = c;
+              if(scratch_idx < SCRATCH_BUFFER_SIZE - 1){
+                scratch[scratch_idx++] = c;
+              }
+              else{
+                Serial.println("Warning: scratch buffer out of memory");
+              }
             }
           }
 
@@ -6812,20 +6822,20 @@ boolean parseConfigurationMessageBody(char * body){
       strncpy(value, body + json_tokens[ii+1].start, valuelen);
     }
 
-     Serial.print(F("Info: JSON token: "));
+     Serial.print(F("Info: JSON token: \""));
      Serial.print(key);
-     Serial.print(" => ");
+     Serial.print("\" => \"");
      Serial.print(value);
-     Serial.println();
+     Serial.println("\"");
 
     // handlers for valid JSON keys
-    if(strcmp(key, "ssid") == 0){
+    if(strcmp(key, "ssid") == 0){      
       found_ssid = true;
       strcpy(ssid, value);
     }
     else if(strcmp(key, "pwd") == 0){
       found_pwd = true;
-      strcpy(pwd, value);
+      strcpy(pwd, value);   
     }
     else if((strcmp(key, "exit") == 0) && (strcmp(value, "true") == 0)){
       found_exit = true;
@@ -6867,7 +6877,7 @@ boolean parseConfigurationMessageBody(char * body){
       set_ssid(ssid);
       set_network_password(pwd);
       set_network_security_mode("auto");
-
+      
       if(esp.connectToNetwork((char *) ssid, (char *) pwd, 45000)){
         Serial.print(F("Info: Successfully connected to Network \""));
         Serial.print(ssid);
