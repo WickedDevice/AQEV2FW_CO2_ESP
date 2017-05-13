@@ -473,7 +473,7 @@ const uint8_t heartbeat_waveform[NUM_HEARTBEAT_WAVEFORM_SAMPLES] PROGMEM = {
 };
 uint8_t heartbeat_waveform_index = 0;
 
-#define SCRATCH_BUFFER_SIZE (1024)
+#define SCRATCH_BUFFER_SIZE (512)
 char scratch[SCRATCH_BUFFER_SIZE] = { 0 };  // scratch buffer, for general use
 uint16_t scratch_idx = 0;
 #define ESP8266_INPUT_BUFFER_SIZE (1500)
@@ -6518,7 +6518,7 @@ void doSoftApModeConfigBehavior(void){
     // if it's in the white list allow it
     boolean in_whitelist = false;
     for(uint8_t jj = 0; jj < sizeof(whitelist); jj++){
-      char wl_char = pgm_read_byte(&(whitelist[jj]));
+      char wl_char = pgm_read_byte(&(whitelist[jj])); 
       if(wl_char == c){
         in_whitelist = true;
         break;
@@ -6593,11 +6593,16 @@ void doSoftApModeConfigBehavior(void){
 
           // pay attention to incoming traffic
           while(esp.available()){
-            char c = esp.read();
+            char c = esp.read();            
             if(got_opening_brace){
               if(c == '}'){
                 got_closing_brace = true;
-                scratch[scratch_idx++] = c;
+                if(scratch_idx < SCRATCH_BUFFER_SIZE - 1){
+                  scratch[scratch_idx++] = c;
+                }
+                else{
+                  Serial.println("Warning: scratch buffer out of memory");
+                }
                 break;
               }
               else{
@@ -6611,7 +6616,12 @@ void doSoftApModeConfigBehavior(void){
             }
             else if(c == '{'){
               got_opening_brace = true;
-              scratch[scratch_idx++] = c;
+              if(scratch_idx < SCRATCH_BUFFER_SIZE - 1){
+                scratch[scratch_idx++] = c;
+              }
+              else{
+                Serial.println("Warning: scratch buffer out of memory");
+              }
             }
           }
 
@@ -6812,14 +6822,14 @@ boolean parseConfigurationMessageBody(char * body){
       strncpy(value, body + json_tokens[ii+1].start, valuelen);
     }
 
-     Serial.print(F("Info: JSON token: "));
+     Serial.print(F("Info: JSON token: \""));
      Serial.print(key);
-     Serial.print(" => ");
+     Serial.print("\" => \"");
      Serial.print(value);
-     Serial.println();
+     Serial.println("\"");
 
     // handlers for valid JSON keys
-    if(strcmp(key, "ssid") == 0){
+    if(strcmp(key, "ssid") == 0){      
       found_ssid = true;
       strcpy(ssid, value);
     }
