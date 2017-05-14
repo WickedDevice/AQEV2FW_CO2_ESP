@@ -20,7 +20,7 @@
 // semantic versioning - see http://semver.org/
 #define AQEV2FW_MAJOR_VERSION 2
 #define AQEV2FW_MINOR_VERSION 2
-#define AQEV2FW_PATCH_VERSION 0
+#define AQEV2FW_PATCH_VERSION 1
 
 #define WLAN_SEC_AUTO (10) // made up to support auto-config of security
 
@@ -5135,9 +5135,9 @@ boolean publishCO2(){
   co2_convert_to_ppm(co2_moving_average, &converted_value, &compensated_value);
   co2_ppm = compensated_value;
   //safe_dtostrf(co2_moving_average, -8, 5, raw_value_string, 16);
-  safe_dtostrf(converted_value, -8, 0, converted_value_string, 16);
-  safe_dtostrf(compensated_value, -8, 0, compensated_value_string, 16);
-  safe_dtostrf(instant_co2_ppm, -8, 0, raw_instant_value_string, 16);
+  safe_dtostrf(converted_value, -8, 1, converted_value_string, 16);
+  safe_dtostrf(compensated_value, -8, 1, compensated_value_string, 16);
+  safe_dtostrf(instant_co2_ppm, -8, 1, raw_instant_value_string, 16);
 
   //trim_string(raw_value_string);
   trim_string(converted_value_string);
@@ -5425,8 +5425,8 @@ void printCsvDataLine(){
     co2_convert_to_ppm(co2_moving_average, &converted_value, &compensated_value);
     co2_ppm = compensated_value;
 
-    Serial.print(co2_moving_average, 0);
-    appendToString(co2_moving_average, 0, dataString, &dataStringRemaining);
+    Serial.print(co2_moving_average, 1);
+    appendToString(co2_moving_average, 1, dataString, &dataStringRemaining);
   }
   else{
     Serial.print(F("---"));
@@ -5439,61 +5439,73 @@ void printCsvDataLine(){
   Serial.println();
   appendToString("\n", dataString, &dataStringRemaining);
 
-  if((call_counter % 10) == 0){ // once every 10 reports
-    clearLCD(false);
-    if((mode == SUBMODE_OFFLINE) && init_sdcard_ok){
-      char filename[16] = {0};
-      getNowFilename(filename, 15);
-      File dataFile = SD.open(filename, FILE_WRITE);
-      if (dataFile) {
-        dataFile.print(dataString);
-        dataFile.close();
-        setLCD_P(PSTR("  LOGGING DATA  "
-                      "   TO SD CARD   "));
-      }
-      else {
-        Serial.print("Error: Failed to open SD card file named \"");
-        Serial.print(filename);
-        Serial.println(F("\""));
-        setLCD_P(PSTR("  SD CARD FILE  "
-                      "  OPEN FAILED   "));
-        lcdFrownie(15, 1);
-      }
+  boolean sdcard_write_succeeded = true;
+  char filename[16] = {0};
+  if(init_sdcard_ok){
+    getNowFilename(filename, 15);
+    File dataFile = SD.open(filename, FILE_WRITE);          
+    if(dataFile) {      
+      dataFile.print(dataString);
+      dataFile.close();    
     }
-    else if((mode == SUBMODE_OFFLINE) && !init_sdcard_ok){
-      setLCD_P(PSTR("  LOGGING DATA  "
-                    "  TO USB-SERIAL "));
+    else{
+      sdcard_write_succeeded = false;
     }
   }
-  else { // otherwise display the data
-    clearLCD(false);
-    updateLCD("TEMP ", 0, 0, 5, false);
-    updateLCD("RH ", 10, 0, 3, false);
-    updateLCD("CO2 ", 0, 1, 4, false);
 
-    if(init_sht25_ok){
-      float reported_temperature = temperature_degc - reported_temperature_offset_degC;
-      if(temperature_units == 'F'){
-        reported_temperature = toFahrenheit(reported_temperature);
+  if(mode == SUBMODE_OFFLINE){
+    if(((call_counter % 10) == 0) && sdcard_write_succeeded){ // once every 10 reports    
+      clearLCD(false);    
+      if(init_sdcard_ok){
+        setLCD_P(PSTR("  LOGGING DATA  "
+                      "   TO SD CARD   "));     
       }
-      updateLCD(reported_temperature, 5, 0, 3, false);
+      else{ // if(!init_sdcard_ok)
+        setLCD_P(PSTR("  LOGGING DATA  "
+                      "  TO USB-SERIAL "));
+      }    
+      repaintLCD();    
     }
-    else{
-      // sht25 is not ok
-      updateLCD("XXX", 5, 0, 3, false);
-    }
-
-    if(init_sht25_ok){
-      float reported_relative_humidity_percent = relative_humidity_percent - reported_humidity_offset_percent;
-      updateLCD(reported_relative_humidity_percent, 13, 0, 3, false);
-    }
-    else{
-      updateLCD("XXX", 13, 0, 3, false);
-    }
-
-    updateLCD(co2_ppm, 5, 1, 5, false);
-
-    repaintLCD();
+    else if(sdcard_write_succeeded){ // otherwise display the data (implied, or no sd card installed)
+      clearLCD(false);
+      updateLCD("TEMP ", 0, 0, 5, false);
+      updateLCD("RH ", 10, 0, 3, false);
+      updateLCD("CO2 ", 0, 1, 4, false);
+  
+      if(init_sht25_ok){
+        float reported_temperature = temperature_degc - reported_temperature_offset_degC;
+        if(temperature_units == 'F'){
+          reported_temperature = toFahrenheit(reported_temperature);
+        }
+        updateLCD(reported_temperature, 5, 0, 3, false);
+      }
+      else{
+        // sht25 is not ok
+        updateLCD("XXX", 5, 0, 3, false);
+      }
+  
+      if(init_sht25_ok){
+        float reported_relative_humidity_percent = relative_humidity_percent - reported_humidity_offset_percent;
+        updateLCD(reported_relative_humidity_percent, 13, 0, 3, false);
+      }
+      else{
+        updateLCD("XXX", 13, 0, 3, false);
+      }
+  
+      updateLCD(co2_ppm, 5, 1, 5, false);
+  
+      repaintLCD();
+    }    
+    else { // if( !sdcard_write_succeeded )
+      Serial.print("Error: Failed to open SD card file named \"");
+      Serial.print(filename);
+      Serial.println(F("\""));
+      clearLCD(false);
+      setLCD_P(PSTR("  SD CARD FILE  "
+                    "  OPEN FAILED   "));
+      lcdFrownie(15, 1);          
+    }    
+          
   }
 
   call_counter++;
@@ -6312,7 +6324,7 @@ boolean requestCO2Data(float * co2_ppm){
     }
 
     // attempt to re-synchronize
-    Serial.println(F("Info: Attempting to resynchronize with CO2 sensor"));
+    // Serial.println(F("Info: Attempting to resynchronize with CO2 sensor"));
     for(uint8_t jj = 0; jj <= ii; jj++){
       // send out a variable number of padding bytes in order to brute-force resynchronize the sensor
       // eventually the request message should be received by the sensor correctly
