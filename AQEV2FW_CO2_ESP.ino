@@ -56,7 +56,7 @@ RTC_DS3231 rtc;
 SdFat SD;
 
 TinyGPS gps;
-SoftwareSerial gpsSerial(18, 17); // RX, TX
+SoftwareSerial gpsSerial(18, 18); // RX, TX (we'll never use tx functions)
 SoftwareSerial co2Serial(9, 10);  // RX, TX
 K30 k30(&co2Serial);
 int sensor_enable = 17;
@@ -987,8 +987,7 @@ void init_firmware_version(void){
 
 void resetCO2Sensor(){  
   digitalWrite(sensor_enable, LOW); 
-  delay(100);
-  digitalWrite(sensor_enable, HIGH);   
+  delay(1000);  
 }
 
 void initEsp8266(void){
@@ -1008,7 +1007,12 @@ void initEsp8266(void){
   }
 }
 
-void initializeHardware(void) {
+void initializeHardware(void) {    
+  // Initialize Tiny Watchdog
+  Serial.print(F("Info: Tiny Watchdog Initialization..."));
+  watchdogInitialize();
+  Serial.println(F("OK."));
+  
   Serial.begin(115200);
   Serial1.begin(115200);
 
@@ -1032,10 +1036,9 @@ void initializeHardware(void) {
   print_eeprom_mqtt_client_id();
   Serial.println();
 
-  // Initialize Tiny Watchdog
-  Serial.print(F("Info: Tiny Watchdog Initialization..."));
-  watchdogInitialize();
-  Serial.println(F("OK."));
+  // turn on the co2 sensor
+  pinMode(sensor_enable, OUTPUT);  
+  digitalWrite(sensor_enable, HIGH);
 
   pinMode(A6, OUTPUT);
   uint8_t backlight_behavior = eeprom_read_byte((uint8_t *) EEPROM_BACKLIGHT_STARTUP);
@@ -1184,12 +1187,6 @@ void initializeHardware(void) {
   // put the same thing in for the GPS pins
   // just to be on the safe side
   pinMode(18, INPUT_PULLUP);
-  pinMode(17, OUTPUT);
-
-  // reset the co2 sensor
-  pinMode(sensor_enable, OUTPUT);  
-  resetCO2Sensor();
-
 }
 
 /****** CONFIGURATION SUPPORT FUNCTIONS ******/
@@ -5066,9 +5063,8 @@ void addSample(uint8_t sample_type, float value){
 }
 
 
-boolean collectCO2(boolean resetsensor_and_retry_on_failure){
+void collectCO2(void){
   //Serial.print("CO2:");
-  boolean ret = false; // assume it didn't work
   
   if(k30.getSample(&instant_co2_ppm)){
     //Serial.print(instant_co2_ppm, 1);
@@ -5076,25 +5072,15 @@ boolean collectCO2(boolean resetsensor_and_retry_on_failure){
     if(sample_buffer_idx == (sample_buffer_depth - 1)){
       co2_ready = true;
     }
-    ret = true; // it worked
   }
   else{
-    if(resetsensor_and_retry_on_failure){
-      resetCO2Sensor();
-      ret = collectCO2(false);      
-    }    
-  }
-  
-  return ret;
-  //Serial.println();  
-}
-
-void collectCO2(void){
-  if(!collectCO2(true)){
     Serial.println(F("Error: Failed to communicate with CO2 sensor, restarting"));
     Serial.flush();
+    resetCO2Sensor();
     watchdogForceReset();    
   }
+  
+  //Serial.println();  
 }
 
 float pressure_scale_factor(void){
@@ -5219,6 +5205,7 @@ void watchdogForceReset(void){
 
 void watchdogInitialize(void){
   tinywdt.begin(100, 65000);
+  delay(50);
 }
 
 // modal operation loop functions
