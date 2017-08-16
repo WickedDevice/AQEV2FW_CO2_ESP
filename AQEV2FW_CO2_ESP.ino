@@ -1007,11 +1007,10 @@ void initEsp8266(void){
   }
 }
 
-void initializeHardware(void) {    
-  // Initialize Tiny Watchdog
-  Serial.print(F("Info: Tiny Watchdog Initialization..."));
-  watchdogInitialize();
-  Serial.println(F("OK."));
+void initializeHardware(void) {
+  // turn on the co2 sensor
+  pinMode(sensor_enable, OUTPUT);  
+  digitalWrite(sensor_enable, HIGH);
   
   Serial.begin(115200);
   Serial1.begin(115200);
@@ -1035,10 +1034,6 @@ void initializeHardware(void) {
   Serial.print(F(" Egg Serial Number: "));
   print_eeprom_mqtt_client_id();
   Serial.println();
-
-  // turn on the co2 sensor
-  pinMode(sensor_enable, OUTPUT);  
-  digitalWrite(sensor_enable, HIGH);
 
   pinMode(A6, OUTPUT);
   uint8_t backlight_behavior = eeprom_read_byte((uint8_t *) EEPROM_BACKLIGHT_STARTUP);
@@ -1109,6 +1104,12 @@ void initializeHardware(void) {
     AQEV2FW_PATCH_VERSION);
 
   updateLCD(tmp, 1);
+
+  delay(1000);
+  // Initialize Tiny Watchdog  
+  Serial.print(F("Info: Tiny Watchdog Initialization..."));
+  watchdogInitialize();
+  Serial.println(F("OK."));
 
   Wire.begin();
 
