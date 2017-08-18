@@ -17,6 +17,7 @@
 #include <SoftwareSerial.h>
 #include <K30.h>
 #include <jsmn.h>
+#include <SoftReset.h>
 
 // semantic versioning - see http://semver.org/
 #define AQEV2FW_MAJOR_VERSION 2
@@ -693,7 +694,7 @@ void setup() {
     Serial.println();
     delayForWatchdog();
 
-    while((mode == MODE_CONFIG) || (mode_requires_wifi(target_mode) && !valid_ssid_passed) ) {
+    while((mode == MODE_CONFIG) || ((mode_requires_wifi(target_mode) && !valid_ssid_passed))) {
       allowed_to_write_config_eeprom = true;
       const uint32_t idle_timeout_period_ms = 1000UL * 60UL * 5UL; // 5 minutes
       uint32_t idle_time_ms = 0;
@@ -745,6 +746,7 @@ void setup() {
           idle_time_ms = 0;
           // if you get serial traffic, pass it along to the configModeStateMachine for consumption
           if (CONFIG_MODE_GOT_EXIT == configModeStateMachine(Serial.read(), false)) {
+            mode = MODE_OPERATIONAL;
             break;
           }
         }
@@ -773,12 +775,13 @@ void setup() {
     ok_to_exit_config_mode = true;
 
     target_mode = eeprom_read_byte((const uint8_t *) EEPROM_OPERATIONAL_MODE);
-
     if(!integrity_check_passed){
       ok_to_exit_config_mode = false;
+      mode = MODE_CONFIG;
     }
     else if(mode_requires_wifi(target_mode) && !valid_ssid_passed){
       ok_to_exit_config_mode = false;
+      mode = MODE_CONFIG;
     }
 
   } while(!ok_to_exit_config_mode);
@@ -833,7 +836,7 @@ void setup() {
     if(!integrity_check_passed){
       Serial.println(F("Error: Config Integrity Check Failed after checkForFirmwareUpdates"));
       setLCD_P(PSTR("CONFIG INTEGRITY"
-                    "  CHECK FAILED  "));
+                    "  CHECK FAILED  "));                    
       for(;;){
         // prevent automatic reset
         delay(1000);
@@ -889,7 +892,7 @@ void setup() {
   }
 
   resumeGpsProcessing();
-  backlightOff();
+  backlightOff();  
 }
 
 void loop() {
@@ -988,6 +991,7 @@ void init_firmware_version(void){
 void resetCO2Sensor(){  
   digitalWrite(sensor_enable, LOW); 
   delay(1000);  
+  watchdogForceReset();
 }
 
 void initEsp8266(void){
@@ -1130,17 +1134,7 @@ void initializeHardware(void) {
     init_spi_flash_ok = false;
   }
 
-  // Initialize SD card
-  Serial.print(F("Info: SD Card Initialization..."));
-  if (SD.begin(16)) {
-    Serial.println(F("OK."));
-    init_sdcard_ok = true;
-  }
-  else{
-    Serial.println(F("Fail."));
-    init_sdcard_ok = false;
-  }
-
+  setLCD_P(PSTR("AIR QUALITY EGG "));
   getCurrentFirmwareSignature();
 
   // Initialize SHT25
@@ -1166,6 +1160,17 @@ void initializeHardware(void) {
   else{
     Serial.println(F("Fail."));
     init_rtc_ok = false;
+  }
+
+  // Initialize SD card
+  Serial.print(F("Info: SD Card Initialization..."));
+  if (SD.begin(16)) {
+    Serial.println(F("OK."));
+    init_sdcard_ok = true;
+  }
+  else{
+    Serial.println(F("Fail."));
+    init_sdcard_ok = false;
   }
 
   selectNoSlot();
@@ -2934,20 +2939,24 @@ void printDirectory(File dir, int numTabs) {
        // no more files
        break;
      }
-     for (uint8_t i=0; i<numTabs; i++) {
-       Serial.print(F("\t"));
-     }
+     
      char tmp[16] = {0};
-     entry.getName(tmp, 16);
-     Serial.print(tmp);
-     if (entry.isDirectory()) {
-       Serial.println(F("/"));
-       printDirectory(entry, numTabs+1);
-     } else {
-       // files have sizes, directories do not
-       Serial.print(F("\t"));
-       Serial.print(F("\t"));
-       Serial.println(entry.size(), DEC);
+     entry.getName(tmp, 16);          
+     if(tmp[0] != '.'){                 
+       Serial.print(tmp);
+  
+       for (uint8_t i=0; i<numTabs; i++) {
+         Serial.print(F("\t"));
+       }
+       if (entry.isDirectory()) {
+         Serial.println(F("/"));
+         printDirectory(entry, numTabs+1);
+       } else {
+         // files have sizes, directories do not
+         Serial.print(F("\t"));
+         Serial.print(F("\t"));
+         Serial.println(entry.size(), DEC);
+       }
      }
      entry.close();
    }
@@ -5077,8 +5086,8 @@ void collectCO2(void){
   else{
     Serial.println(F("Error: Failed to communicate with CO2 sensor, restarting"));
     Serial.flush();
-    resetCO2Sensor();
-    watchdogForceReset();    
+//    resetCO2Sensor();
+    watchdogForceReset();    // TODO: uncomment this
   }
   
   //Serial.println();  
@@ -5199,7 +5208,9 @@ void watchdogForceReset(void){
                 " RESET REQUIRED "));
   backlightOn();
   ERROR_MESSAGE_DELAY();
+  
   for(;;){
+    soft_restart();
     delay(1000);
   }
 }
@@ -5451,7 +5462,8 @@ void printCsvDataLine(){
 
   boolean sdcard_write_succeeded = true;
   char filename[16] = {0};
-  if(init_sdcard_ok){
+//  if(init_sdcard_ok){
+  if (SD.begin(16)) {    
     getNowFilename(filename, 15);
     File dataFile = SD.open(filename, FILE_WRITE);          
     if(dataFile) {      
