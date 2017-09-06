@@ -1134,7 +1134,7 @@ void initializeHardware(void) {
     init_spi_flash_ok = false;
   }
 
-  setLCD_P(PSTR("AIR QUALITY EGG "));
+//  setLCD_P(PSTR("AIR QUALITY EGG "));
   getCurrentFirmwareSignature();
 
   // Initialize SHT25
