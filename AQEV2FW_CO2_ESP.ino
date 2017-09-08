@@ -18,6 +18,8 @@
 #include <K30.h>
 #include <jsmn.h>
 #include <SoftReset.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BMP280.h>
 
 // semantic versioning - see http://semver.org/
 #define AQEV2FW_MAJOR_VERSION 2
@@ -60,6 +62,8 @@ TinyGPS gps;
 SoftwareSerial gpsSerial(18, 18); // RX, TX (we'll never use tx functions)
 SoftwareSerial co2Serial(9, 10);  // RX, TX
 K30 k30(&co2Serial);
+Adafruit_BMP280 bme;
+
 int sensor_enable = 17;
 
 boolean gps_disabled = false;
@@ -87,10 +91,13 @@ float reported_humidity_offset_percent = 0.0f;
 float temperature_degc = 0.0f;
 float relative_humidity_percent = 0.0f;
 float co2_ppm = 0.0f;
+float pressure_pa = 0.0f;
 
 float instant_temperature_degc = 0.0f;
 float instant_humidity_percent = 0.0f;
 float instant_co2_ppm = 0.0f;
+float instant_pressure_pa = 0.0f;
+float instant_altitude_m = 0.0f;
 
 float gps_latitude = TinyGPS::GPS_INVALID_F_ANGLE;
 float gps_longitude = TinyGPS::GPS_INVALID_F_ANGLE;
@@ -101,11 +108,12 @@ float user_latitude = TinyGPS::GPS_INVALID_F_ANGLE;
 float user_longitude = TinyGPS::GPS_INVALID_F_ANGLE;
 float user_altitude = TinyGPS::GPS_INVALID_F_ALTITUDE;
 
-#define MAX_SAMPLE_BUFFER_DEPTH (240) // 20 minutes @ 5 second resolution
+#define MAX_SAMPLE_BUFFER_DEPTH (180) // 15 minutes @ 5 second resolution
 #define CO2_SAMPLE_BUFFER         (0)
 #define TEMPERATURE_SAMPLE_BUFFER (1)
 #define HUMIDITY_SAMPLE_BUFFER    (2)
-#define NUM_SAMPLE_BUFFERS        (3)
+#define PRESSURE_SAMPLE_BUFFER    (3)
+#define NUM_SAMPLE_BUFFERS        (4)
 float sample_buffer[NUM_SAMPLE_BUFFERS][MAX_SAMPLE_BUFFER_DEPTH] = {0};
 uint16_t sample_buffer_idx = 0;
 
@@ -125,12 +133,14 @@ jsmntok_t json_tokens[21];
 boolean temperature_ready = false;
 boolean humidity_ready = false;
 boolean co2_ready = false;
+boolean pressure_ready = false;
 
 boolean init_sht25_ok = false;
 boolean init_spi_flash_ok = false;
 boolean init_esp8266_ok = false;
 boolean init_sdcard_ok = false;
 boolean init_rtc_ok = false;
+boolean init_bmp280_ok = false;
 
 typedef struct{
   float temperature_degC;     // starting at this temperature
@@ -498,6 +508,7 @@ const char * header_row = "Timestamp,"
                "Temperature[degC],"
                "Humidity[percent],"
                "CO2[ppm],"
+               "Pressure[Pa],"
                "Latitude[deg],"
                "Longitude[deg],"
                "Altitude[m]";
@@ -699,7 +710,7 @@ void setup() {
       const uint32_t idle_timeout_period_ms = 1000UL * 60UL * 5UL; // 5 minutes
       uint32_t idle_time_ms = 0;
       Serial.println(F("-~=* In CONFIG Mode *=~-"));
-      if(integrity_check_passed && valid_ssid_passed){
+      if(integrity_check_passed){
         setLCD_P(PSTR("  CONFIG MODE"));
       }
 
@@ -935,6 +946,7 @@ void loop() {
     collectCO2();
     collectTemperature();
     collectHumidity();
+    collectPressure();
     advanceSampleBufferIndex();
   }
 
@@ -1146,6 +1158,17 @@ void initializeHardware(void) {
   else {
     Serial.println(F("Failed."));
     init_sht25_ok = false;
+  }
+
+
+  Serial.print(F("Info: BMP280 Initialization..."));
+  if (!bme.begin()) { 
+    Serial.println(F("Fail."));
+    init_bmp280_ok = false;
+  }
+  else{
+    Serial.println(F("OK."));
+    init_bmp280_ok = true;
   }
 
   // Initialize SD card
@@ -5072,6 +5095,16 @@ void addSample(uint8_t sample_type, float value){
   }
 }
 
+void collectPressure(void){
+  if(init_bmp280_ok){
+    instant_pressure_pa = bme.readPressure();
+    instant_altitude_m = bme.readAltitude();
+    addSample(PRESSURE_SAMPLE_BUFFER, instant_pressure_pa);
+    if(sample_buffer_idx == (sample_buffer_depth - 1)){
+      pressure_ready = true;
+    }
+  }
+}
 
 void collectCO2(void){
   //Serial.print("CO2:");
@@ -5126,9 +5159,13 @@ float pressure_scale_factor(void){
 
 void co2_convert_to_ppm(float average, float * converted_value, float * temperature_compensated_value){
   static boolean first_access = true;
-  static float co2_zero_volts = 0.0f;
+  static float co2_zero_ppm = 0.0f;
   if(first_access){
-    co2_zero_volts = eeprom_read_float((const float *) EEPROM_CO2_CAL_OFFSET);
+    co2_zero_ppm = eeprom_read_float((const float *) EEPROM_CO2_CAL_OFFSET);
+    int32_t as_long = *((int32_t * ) (&co2_zero_ppm));
+    if(as_long == -1){
+      co2_zero_ppm = 0;
+    }
     first_access = false;
   }
 
@@ -5138,10 +5175,50 @@ void co2_convert_to_ppm(float average, float * converted_value, float * temperat
   // there's no interpretation needed for this sensor, we don't actually have any "raw" data
   *converted_value = average;
 
-  *temperature_compensated_value = *converted_value; // no compensation yet
+  *temperature_compensated_value = *converted_value - co2_zero_ppm; // no compensation yet
   if(*temperature_compensated_value <= 0.0f){
     *temperature_compensated_value = 0.0f;
   }
+}
+
+boolean publishPressure(){
+  clearTempBuffers();
+  uint16_t num_samples = pressure_ready ? sample_buffer_depth : sample_buffer_idx;
+  float pressure_moving_average = calculateAverage(&(sample_buffer[PRESSURE_SAMPLE_BUFFER][0]), num_samples);
+  pressure_pa = pressure_moving_average;
+
+  safe_dtostrf(pressure_pa, -8, 1, converted_value_string, 16);
+  trim_string(converted_value_string);
+  replace_nan_with_null(converted_value_string);
+
+  safe_dtostrf(instant_altitude_m, -8, 1, compensated_value_string, 16);
+  trim_string(compensated_value_string);
+  replace_nan_with_null(compensated_value_string);
+  
+  snprintf(scratch, SCRATCH_BUFFER_SIZE-1,
+    "{"
+    "\"serial-number\":\"%s\","
+    "\"pressure-units\":\"Pa\","
+    "\"pressure\":%s,"
+    "\"altitude-units\":\"m\","
+    "\"altitude\":%s,"    
+    "\"sensor-part-number\":\"BMP280\""
+    "%s"
+    "}",
+    mqtt_client_id,    
+    converted_value_string,
+    compensated_value_string,
+    gps_mqtt_string);
+
+  replace_character(scratch, '\'', '\"'); // replace single quotes with double quotes
+
+  strcat(MQTT_TOPIC_STRING, MQTT_TOPIC_PREFIX);
+  strcat(MQTT_TOPIC_STRING, "pressure");
+  if(mqtt_suffix_enabled){
+    strcat(MQTT_TOPIC_STRING, "/");
+    strcat(MQTT_TOPIC_STRING, mqtt_client_id);
+  }
+  return mqttPublish(MQTT_TOPIC_STRING, scratch);
 }
 
 boolean publishCO2(){
@@ -5307,6 +5384,18 @@ void loop_wifi_mqtt_mode(void){
           updateLCD("---", 5, 1, 5, false);
         }
 
+        if(init_bmp280_ok && (pressure_ready || (sample_buffer_idx > 0))){
+          if(!publishPressure()){
+            Serial.println(F("Error: Failed to publish Pressure."));
+          }
+          else{            
+            // updateLCD(co2_ppm, 5, 1, 5, false);
+          }
+        }
+        else{
+          // updateLCD("---", 5, 1, 5, false);
+        }
+
         repaintLCD();
       }
       else{
@@ -5448,6 +5537,23 @@ void printCsvDataLine(){
 
     Serial.print(co2_moving_average, 1);
     appendToString(co2_moving_average, 1, dataString, &dataStringRemaining);
+  }
+  else{
+    Serial.print(F("---"));
+    appendToString("---", dataString, &dataStringRemaining);
+  }
+
+  Serial.print(F(","));
+  appendToString("," , dataString, &dataStringRemaining);  
+
+  float pressure_moving_average = 0.0f;
+  num_samples = pressure_ready ? sample_buffer_depth : sample_buffer_idx;
+  if(pressure_ready || (sample_buffer_idx > 0)){    
+    pressure_moving_average = calculateAverage(&(sample_buffer[PRESSURE_SAMPLE_BUFFER][0]), num_samples);    
+    pressure_pa = pressure_moving_average;
+
+    Serial.print(pressure_moving_average, 1);
+    appendToString(pressure_moving_average, 1, dataString, &dataStringRemaining);
   }
   else{
     Serial.print(F("---"));
