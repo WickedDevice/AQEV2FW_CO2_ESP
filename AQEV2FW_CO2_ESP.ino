@@ -54,6 +54,7 @@ boolean wifi_can_connect = false;
 uint8_t wifi_connect_attempts = 0;
 boolean user_location_override = false;
 boolean gps_installed = false;
+boolean display_offline_mode_banner = false;
 
 RTC_DS3231 rtc;
 SdFat SD;
@@ -906,9 +907,98 @@ void setup() {
   backlightOff();  
 }
 
+void updateDisplayedSensors(){
+  static uint8_t current_displayed_page = 0;
+  static boolean first = true;
+  static unsigned long previous_display_update = 0;
+  const long display_update_interval = 15000;  
+  uint8_t NUM_DISPLAY_PAGES = init_bmp280_ok ? 2 : 1;
+  
+  if(first || ((current_millis - previous_display_update) >= display_update_interval)){
+    previous_display_update = current_millis;
+    clearLCD(false);
+    
+    if(display_offline_mode_banner){      
+      if(init_sdcard_ok){
+        setLCD_P(PSTR("  LOGGING DATA  "
+                      "   TO SD CARD   "));     
+      }
+      else{ // if(!init_sdcard_ok)
+        setLCD_P(PSTR("  LOGGING DATA  "
+                      "  TO USB-SERIAL "));
+      }    
+      repaintLCD();       
+      first = false;
+      return;
+    }
+
+    switch(current_displayed_page){    
+    case 1:
+      if(init_bmp280_ok){
+        updateLCD("BP ", 0, 0, 3, false);    
+        if(pressure_ready || (sample_buffer_idx > 0)){          
+          updateLCD(pressure_pa / 1000.0f, 3, 0, 5, false);
+        }
+        else{
+          updateLCD("---", 3, 0, 5, false);
+        }
+      }    
+      break;
+    case 0:
+    default:
+      updateLCD("TEMP ", 0, 0, 5, false);
+      updateLCD("RH ", 10, 0, 3, false);
+      updateLCD("CO2 ", 0, 1, 4, false);    
+      if(init_sht25_ok){
+        if(temperature_ready|| (sample_buffer_idx > 0)){
+          float reported_temperature = temperature_degc - reported_temperature_offset_degC;
+          if(temperature_units == 'F'){
+            reported_temperature = toFahrenheit(reported_temperature);
+          }
+          updateLCD(reported_temperature, 5, 0, 3, false);
+        }
+        else{
+          updateLCD("---", 5, 0, 3, false);
+        }
+      }
+      else{
+        // sht25 is not ok
+        updateLCD("XXX", 5, 0, 3, false);
+      }
+
+      if(init_sht25_ok){
+        if(humidity_ready || (sample_buffer_idx > 0)){
+          float reported_relative_humidity_percent = relative_humidity_percent - reported_humidity_offset_percent;
+          updateLCD(reported_relative_humidity_percent, 13, 0, 3, false);
+        }
+        else{
+          updateLCD("---", 13, 0, 3, false);
+        }
+      }
+      else{
+        updateLCD("XXX", 13, 0, 3, false);
+      }
+
+      if(co2_ready || (sample_buffer_idx > 0)){
+        updateLCD(co2_ppm, 5, 1, 5, false);
+      }
+      else{
+        updateLCD("---", 5, 1, 5, false);
+      }         
+      break;             
+    }  
+    
+    repaintLCD();   
+    
+    current_displayed_page++;
+    current_displayed_page = current_displayed_page % NUM_DISPLAY_PAGES;
+  }
+  first = false;
+}
+
 void loop() {
   current_millis = millis();
-  static boolean first = true;
+  static boolean first = true;  
 
   // whenever you come through loop, process a GPS byte if there is one
   // will need to test if this keeps up, but I think it will
@@ -982,6 +1072,8 @@ void loop() {
   if(gps_disabled){
     resumeGpsProcessing();
   }
+
+  updateDisplayedSensors();
 }
 
 /****** INITIALIZATION SUPPORT FUNCTIONS ******/
@@ -1146,7 +1238,6 @@ void initializeHardware(void) {
     init_spi_flash_ok = false;
   }
 
-//  setLCD_P(PSTR("AIR QUALITY EGG "));
   getCurrentFirmwareSignature();
 
   // Initialize SHT25
@@ -5318,11 +5409,7 @@ void loop_wifi_mqtt_mode(void){
       num_mqtt_intervals_without_wifi = 0;
 
       if(mqttReconnect()){
-        clearLCD();
-        updateLCD("TEMP ", 0, 0, 5, false);
-        updateLCD("RH ", 10, 0, 3, false);
-        updateLCD("CO2 ", 0, 1, 4, false);
-
+        
         //connected to MQTT server and connected to Wi-Fi network
         num_mqtt_connect_retries = 0;
         if((publish_counter % 10) == 0){ // only publish heartbeats every 10 reporting intervals
@@ -5336,21 +5423,7 @@ void loop_wifi_mqtt_mode(void){
             if(!publishTemperature()){
               Serial.println(F("Error: Failed to publish Temperature."));
             }
-            else{
-              float reported_temperature = temperature_degc - reported_temperature_offset_degC;
-              if(temperature_units == 'F'){
-                reported_temperature = toFahrenheit(reported_temperature);
-              }
-              updateLCD(reported_temperature, 5, 0, 3, false);
-            }
           }
-          else{
-            updateLCD("---", 5, 0, 3, false);
-          }
-        }
-        else{
-          // sht25 is not ok
-          updateLCD("XXX", 5, 0, 3, false);
         }
 
         if(init_sht25_ok){
@@ -5358,45 +5431,21 @@ void loop_wifi_mqtt_mode(void){
             if(!publishHumidity()){
               Serial.println(F("Error: Failed to publish Humidity."));
             }
-            else{
-              float reported_relative_humidity_percent = relative_humidity_percent - reported_humidity_offset_percent;
-              updateLCD(reported_relative_humidity_percent, 13, 0, 3, false);
-            }
-          }
-          else{
-            updateLCD("---", 13, 0, 3, false);
           }
         }
-        else{
-          updateLCD("XXX", 13, 0, 3, false);
-        }
-
 
         if(co2_ready || (sample_buffer_idx > 0)){
           if(!publishCO2()){
             Serial.println(F("Error: Failed to publish CO2."));
           }
-          else{
-            updateLCD(co2_ppm, 5, 1, 5, false);
-          }
-        }
-        else{
-          updateLCD("---", 5, 1, 5, false);
         }
 
         if(init_bmp280_ok && (pressure_ready || (sample_buffer_idx > 0))){
           if(!publishPressure()){
             Serial.println(F("Error: Failed to publish Pressure."));
           }
-          else{            
-            // updateLCD(co2_ppm, 5, 1, 5, false);
-          }
-        }
-        else{
-          // updateLCD("---", 5, 1, 5, false);
         }
 
-        repaintLCD();
       }
       else{
         // not connected to MQTT server
@@ -5583,46 +5632,10 @@ void printCsvDataLine(){
 
   if(mode == SUBMODE_OFFLINE){
     if(((call_counter % 10) == 0) && sdcard_write_succeeded){ // once every 10 reports    
-      clearLCD(false);    
-      if(init_sdcard_ok){
-        setLCD_P(PSTR("  LOGGING DATA  "
-                      "   TO SD CARD   "));     
-      }
-      else{ // if(!init_sdcard_ok)
-        setLCD_P(PSTR("  LOGGING DATA  "
-                      "  TO USB-SERIAL "));
-      }    
-      repaintLCD();    
+      display_offline_mode_banner = true; 
     }
     else if(sdcard_write_succeeded){ // otherwise display the data (implied, or no sd card installed)
-      clearLCD(false);
-      updateLCD("TEMP ", 0, 0, 5, false);
-      updateLCD("RH ", 10, 0, 3, false);
-      updateLCD("CO2 ", 0, 1, 4, false);
-  
-      if(init_sht25_ok){
-        float reported_temperature = temperature_degc - reported_temperature_offset_degC;
-        if(temperature_units == 'F'){
-          reported_temperature = toFahrenheit(reported_temperature);
-        }
-        updateLCD(reported_temperature, 5, 0, 3, false);
-      }
-      else{
-        // sht25 is not ok
-        updateLCD("XXX", 5, 0, 3, false);
-      }
-  
-      if(init_sht25_ok){
-        float reported_relative_humidity_percent = relative_humidity_percent - reported_humidity_offset_percent;
-        updateLCD(reported_relative_humidity_percent, 13, 0, 3, false);
-      }
-      else{
-        updateLCD("XXX", 13, 0, 3, false);
-      }
-  
-      updateLCD(co2_ppm, 5, 1, 5, false);
-  
-      repaintLCD();
+      display_offline_mode_banner = false;     
     }    
     else { // if( !sdcard_write_succeeded )
       Serial.print("Error: Failed to open SD card file named \"");
