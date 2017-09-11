@@ -5370,6 +5370,12 @@ void delayForWatchdog(void){
 }
 
 void watchdogForceReset(void){
+  Serial.println(F("Info: Attempting Watchdog Forced Restart."));
+  setLCD_P(PSTR("   ATTEMPTING   "
+                "  FORCED RESET  "));
+  backlightOn();
+  ERROR_MESSAGE_DELAY();
+  
   tinywdt.force_reset();
   Serial.println(F("Error: Watchdog Force Restart failed. Manual reset is required."));
   setLCD_P(PSTR("AUTORESET FAILED"
