@@ -4955,15 +4955,18 @@ boolean publishHeartbeat(){
   clearTempBuffers();
   static uint32_t post_counter = 0;
   uint8_t sample = pgm_read_byte(&heartbeat_waveform[heartbeat_waveform_index++]);
-
+  char hasPressureString[16] = {0};
+  if(init_bmp280_ok){
+    strcpy_P(hasPressureString,PSTR(",\"pressure\""));
+  }
   snprintf(scratch, SCRATCH_BUFFER_SIZE-1,
   "{"
   "\"serial-number\":\"%s\","
   "\"converted-value\":%d,"
   "\"firmware-version\":\"%s\","
-  "\"publishes\":[\"co2\",\"temperature\",\"humidity\"],"
+  "\"publishes\":[\"co2\",\"temperature\",\"humidity\"%s],"
   "\"counter\":%lu"
-  "}", mqtt_client_id, sample, firmware_version, post_counter++);
+  "}", mqtt_client_id, sample, firmware_version, hasPressureString, post_counter++);
 
   if(heartbeat_waveform_index >= NUM_HEARTBEAT_WAVEFORM_SAMPLES){
      heartbeat_waveform_index = 0;
