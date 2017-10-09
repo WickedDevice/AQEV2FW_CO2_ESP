@@ -844,6 +844,7 @@ void setup() {
 
     // Check for Firmware Updates
     checkForFirmwareUpdates();
+    checkForESPFirmwareUpdates();
     integrity_check_passed = checkConfigIntegrity();
     if(!integrity_check_passed){
       Serial.println(F("Error: Config Integrity Check Failed after checkForFirmwareUpdates"));
@@ -6894,3 +6895,97 @@ boolean parseConfigurationMessageBody(char * body){
 
   return found_exit;
 }
+
+void checkForESPFirmwareUpdates(){
+  // the firmware version should be at least 1.5.0.0 = 01 50 00 00
+  uint32_t version_int = 0;
+  if(esp.getVersion(&version_int)){
+    Serial.print(F("Info: Current ESP8266 Firmware Version is "));
+    Serial.println(version_int);
+    if(version_int >= 1050000UL){
+      Serial.println(F("Info: ESP8266 Firmware Version is up to date"));
+    }
+    else {
+      Serial.println(F("Info: ESP8266 Firmware Update required..."));
+      doESP8266Update();
+    }
+  }
+  else{
+    Serial.println(F("Error: Failed to get ESP8266 firmware version"));
+  }  
+}
+
+void doESP8266Update(){
+   boolean timeout = false;
+   boolean gotOK = false;
+
+   int32_t timeout_interval =  300000; // 5 minutes
+
+   setLCD_P(PSTR("   PERFORMING   "
+                 "   ESP UPDATES  "));
+                 
+   Serial.print(F("Info: Starting ESP8266 Firmware Update..."));
+   if(esp.firmwareUpdateBegin()){
+     // Serial.println(F("OK"));
+     uint8_t status = 0xff;
+     uint32_t previousMillis = millis();
+     while(esp.firmwareUpdateStatus(&status) && !timeout){
+       // Serial.print(F("Info: Pet watchdog @ "));
+       // Serial.println(millis());
+       petWatchdog();
+       delayForWatchdog();
+
+       if(status == 2){
+         gotOK = true;
+         // Serial.println(F("ESP8266 returned OK."));
+       }
+       else if(status == 3){
+         if(gotOK){
+           Serial.println(F("Done."));
+           break; // break out of the loop and perform a reboot
+         }
+         else{
+           Serial.println(F("Unexpected Error."));
+           Serial.println(F("Warning: ESP8266 Reset occurred before receiving OK."));
+           return;
+         }
+       }
+
+       if(status != 0xff){
+         previousMillis =  current_millis; // reset timeout on state change
+         // Serial.print("ESP8266 Status Changed to ");
+         // Serial.println(status);
+         status = 0xff;
+       }
+
+       current_millis = millis();
+       if(current_millis - previousMillis >= timeout_interval){
+          timeout = true;
+       }
+     }
+     if(timeout){
+       Serial.println(F("Timeout Error."));
+       return;
+     }
+     else if(status == 1){
+       Serial.println(F("Unknown Error."));
+       return;
+     }
+   }
+   else {
+     Serial.println(F("Failed."));     
+     return;
+   }
+   
+   Serial.print(F("Info: ESP8266 restoring defaults..."));
+   if(esp.restoreDefault()){
+     Serial.println(F("OK."));
+   }
+   else{
+     Serial.println(F("Failed."));
+   }
+
+   Serial.flush();
+   watchdogForceReset();
+}
+
