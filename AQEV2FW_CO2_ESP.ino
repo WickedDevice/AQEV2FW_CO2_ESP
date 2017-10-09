@@ -193,7 +193,7 @@ uint8_t mode = MODE_OPERATIONAL;
 #define EEPROM_CO_CAL_SLOPE       (EEPROM_CO_SENSITIVITY - 4)     // float value, 4-bytes, the slope applied to the sensor   [UNUSED]
 #define EEPROM_CO_CAL_OFFSET      (EEPROM_CO_CAL_SLOPE - 4)       // float value, 4-bytes, the offset applied to the sensor  [UNUSED]
 #define EEPROM_PRIVATE_KEY        (EEPROM_CO_CAL_OFFSET - 32)     // 32-bytes of Random Data (256-bits)
-#define EEPROM_MQTT_SERVER_NAME   (EEPROM_PRIVATE_KEY - 32)       // string, the DNS name of the MQTT server (default mqtt.opensensors.io), up to 32 characters (one of which is a null terminator)
+#define EEPROM_MQTT_SERVER_NAME   (EEPROM_PRIVATE_KEY - 32)       // string, the DNS name of the MQTT server (default mqtt.wickeddevice.com), up to 32 characters (one of which is a null terminator)
 #define EEPROM_MQTT_USERNAME      (EEPROM_MQTT_SERVER_NAME - 32)  // string, the user name for the MQTT server (default wickeddevice), up to 32 characters (one of which is a null terminator)
 #define EEPROM_MQTT_CLIENT_ID     (EEPROM_MQTT_USERNAME - 32)     // string, the client identifier for the MQTT server (default SHT25 identifier), between 1 and 23 characters long
 #define EEPROM_MQTT_AUTH          (EEPROM_MQTT_CLIENT_ID - 1)     // MQTT authentication enabled, single byte value 0 = disabled or 1 = enabled
@@ -2293,10 +2293,10 @@ void restore(char * arg) {
     configInject("altitude -1\r");
     configInject("backlight 60\r");
     configInject("backlight initon\r");
-    configInject("mqttsrv mqtt.opensensors.io\r");
+    configInject("mqttsrv mqtt.wickeddevice.com\r");
     configInject("mqttport 1883\r");
     configInject("mqttauth enable\r");
-    configInject("mqttuser wickeddevice\r");
+    // configInject("mqttuser wickeddevice\r");
     configInject("mqttprefix /orgs/wd/aqe/\r");
     configInject("mqttsuffix enable\r");
     configInject("sampling 5, 60, 60\r"); // sample every 5 seconds, average over 1 minutes, report every minute
@@ -2312,6 +2312,10 @@ void restore(char * arg) {
     configInject("restore key\r");
     configInject("restore co2\r");
     configInject("restore mac\r");
+
+    // copy the MQTT ID to the MQTT Username
+    eeprom_read_block((void *) tmp, (const void *) EEPROM_MQTT_CLIENT_ID, 32);
+    eeprom_write_block((void *) tmp, (void *) EEPROM_MQTT_USERNAME, 32);
 
     eeprom_write_block(blank, (void *) EEPROM_SSID, 32); // clear the SSID
     eeprom_write_block(blank, (void *) EEPROM_NETWORK_PWD, 32); // clear the Network Password
