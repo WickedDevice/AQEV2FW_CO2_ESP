@@ -1382,6 +1382,35 @@ void initializeNewConfigSettings(void){
     recomputeAndStoreConfigChecksum();
   }
 
+  // re-configure from mqtt.opensensors.io to mqtt.wickeddevice.com
+  clearTempBuffers();
+  eeprom_read_block(command_buf, (const void *) EEPROM_MQTT_SERVER_NAME, 32);
+  if(strcmp_P(command_buf, PSTR("mqtt.opensensors.io")) == 0){
+    memset(command_buf, 0, 128);
+    eeprom_read_block(command_buf, (const void *) EEPROM_MQTT_USERNAME, 32);
+    if(strcmp_P(command_buf, PSTR("wickeddevice")) == 0){      
+      eeprom_read_block(converted_value_string, (const void *) EEPROM_MQTT_CLIENT_ID, 32);
+      if(strncmp_P(converted_value_string, PSTR("egg"), 3) == 0){
+        
+        if(!in_config_mode){
+          configInject("aqe\r");
+          in_config_mode = true;
+        }        
+        
+        // change the mqtt server to mqtt.wickeddevice.com
+        // and change the mqtt username to the egg serial number
+        // effectively:
+        //   configInject("mqttsrv mqtt.wickeddevice.com\r");
+        //   configInject("mqttuser egg-serial-number \r");
+        configInject("mqttsrv mqtt.wickeddevice.com\r");
+        strcpy_P(raw_instant_value_string, PSTR("mqttuser "));
+        strcat(raw_instant_value_string, converted_value_string);
+        strcat_P(raw_instant_value_string, PSTR("\r"));
+        configInject(raw_instant_value_string);
+      }      
+    }
+  }
+
   if(in_config_mode){
     configInject("exit\r");
   }
