@@ -25,7 +25,7 @@
 // semantic versioning - see http://semver.org/
 #define AQEV2FW_MAJOR_VERSION 2
 #define AQEV2FW_MINOR_VERSION 2
-#define AQEV2FW_PATCH_VERSION 2
+#define AQEV2FW_PATCH_VERSION 3
 
 #define WLAN_SEC_AUTO (10) // made up to support auto-config of security
 
@@ -522,6 +522,7 @@ void setup() {
 
   // initialize hardware
   initializeHardware();
+  resumeGpsProcessing();
 
   //  uint8_t tmp[EEPROM_CONFIG_MEMORY_SIZE] = {0};
   //  get_eeprom_config(tmp);
@@ -706,6 +707,16 @@ void setup() {
 
     Serial.println();
     delayForWatchdog();
+
+    // check to determine if we have a GPS
+    uint32_t gps_wait = millis() + 1500;
+    while(!gps_installed && (gpsSerial.available() || (millis() < gps_wait))){
+      char c = gpsSerial.read();
+      if(c == '$'){
+        gps_installed = true;
+      }
+    }
+    suspendGpsProcessing();
 
     while((mode == MODE_CONFIG) || ((mode_requires_wifi(target_mode) && !valid_ssid_passed))) {
       mode = MODE_CONFIG; // fix for invalid ssid in normal mode and typing exist causing spin state
