@@ -1054,8 +1054,9 @@ void loop() {
 
   if(current_millis - previous_touch_sampling_millis >= touch_sampling_interval){    
     previous_touch_sampling_millis = current_millis;
-    if(!gps_installed){
-      collectTouch();
+    if(!gps_installed || user_location_override){
+      suspendGpsProcessing();
+      collectTouch();  
     }
     processTouchQuietly();
   } 
@@ -1106,6 +1107,8 @@ void init_firmware_version(void){
 
 void resetCO2Sensor(){  
   digitalWrite(sensor_enable, LOW); 
+  pinMode(9, INPUT);  // co2 serial
+  pinMode(10, INPUT); // co2 serial 
   delay(1000);  
   watchdogForceReset();
 }
@@ -5259,8 +5262,8 @@ void collectCO2(void){
   else{
     Serial.println(F("Error: Failed to communicate with CO2 sensor, restarting"));
     Serial.flush();
-//    resetCO2Sensor();
-    watchdogForceReset();    // TODO: uncomment this
+    resetCO2Sensor();
+//    watchdogForceReset();
   }
   
   //Serial.println();  
