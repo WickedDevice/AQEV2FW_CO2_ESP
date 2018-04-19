@@ -3318,21 +3318,24 @@ void advanceByOneHour(uint8_t src_array[4]) {
 
 // does the behavior of executing the one_file_function on a single file
 // or on each file in a range of files
-void fileop_command_delegate(char * arg, void (*one_file_function)(char *)) {
-    char * first_arg = NULL;
-    char * second_arg = NULL;
+void fileop_command_delegate(char *arg, void (*one_file_function)(char *))
+{
+    char *first_arg = NULL;
+    char *second_arg = NULL;
 
     trim_string(arg);
 
     first_arg = strtok(arg, " ");
     second_arg = strtok(NULL, " ");
 
-    if(second_arg == NULL) {
+    if (second_arg == NULL)
+    {
         one_file_function(first_arg);
     }
-    else {
-        uint8_t cur_date[4] = {0,0,0,0};
-        uint8_t end_date[4] = {0,0,0,0};
+    else
+    {
+        uint8_t cur_date[4] = {0, 0, 0, 0};
+        uint8_t end_date[4] = {0, 0, 0, 0};
         crack_datetime_filename(first_arg, cur_date);
         crack_datetime_filename(second_arg, end_date);
 
@@ -3341,31 +3344,37 @@ void fileop_command_delegate(char * arg, void (*one_file_function)(char *)) {
         boolean finished_last_file = false;
         unsigned long previousMillis = millis();
         const long interval = 1000;
-        while(!finished_last_file) {
+        while (!finished_last_file)
+        {
             unsigned long currentMillis = millis();
-            if(currentMillis - previousMillis >= interval) {
+            if (currentMillis - previousMillis >= interval)
+            {
                 previousMillis = currentMillis;
                 petWatchdog();
             }
             memset(cur_date_filename, 0, 16);
             make_datetime_filename(cur_date, cur_date_filename, 15);
 
-            if(SD.exists(cur_date_filename)) {}
-            one_file_function(cur_date_filename);
-        }
+            if (SD.exists(cur_date_filename))
+            {
+                one_file_function(cur_date_filename);
+            }
 
-        if(memcmp(cur_date, end_date, 4) == 0) {
-            finished_last_file = true;
-        }
-        else {
-            advanceByOneHour(cur_date);
+            if (memcmp(cur_date, end_date, 4) == 0)
+            {
+                finished_last_file = true;
+            }
+            else
+            {
+                advanceByOneHour(cur_date);
+            }
         }
     }
     delayForWatchdog();
 }
-}
 
-void download_command(char * arg) {
+void download_command(char *arg)
+{
     Serial.println(header_row);
     fileop_command_delegate(arg, download_one_file);
     Serial.println("Info: Done downloading.");
