@@ -2684,7 +2684,7 @@ void sampling_command(char * arg) {
         case 0:
             l_sample_interval = (uint16_t) strtoul(token, NULL, 10);
             if(l_sample_interval < 1) {
-                Serial.print(F("Error: Sampling interval must be greater than 0 [was "));
+                Serial.print(F("Error: Sampling interval must be at least 1 [was "));
                 Serial.print(l_sample_interval);
                 Serial.print(F("]"));
                 Serial.println();
@@ -3258,10 +3258,16 @@ void download_one_file(char * filename) {
         File dataFile = SD.open(filename, FILE_READ);
         char last_char_read = NULL;
         if (dataFile) {
+            uint32_t byteCounter = 0;
             while (dataFile.available()) {
                 last_char_read = dataFile.read();
+                byteCounter++;
                 if(isprint(last_char_read) || isspace(last_char_read)) {
                     Serial.write(last_char_read);
+                    byteCounter = 0;
+                }
+                if(byteCounter > 1200) {
+                    break;
                 }
             }
             dataFile.close();
