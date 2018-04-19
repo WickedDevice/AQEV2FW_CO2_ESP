@@ -557,7 +557,7 @@ uint8_t heartbeat_waveform_index = 0;
 #define SCRATCH_BUFFER_SIZE (512)
 char scratch[SCRATCH_BUFFER_SIZE] = { 0 };  // scratch buffer, for general use
 uint16_t scratch_idx = 0;
-#define ESP8266_INPUT_BUFFER_SIZE (1500)
+#define ESP8266_INPUT_BUFFER_SIZE (1000)
 uint8_t esp8266_input_buffer[ESP8266_INPUT_BUFFER_SIZE] = {0};     // sketch must instantiate a buffer to hold incoming data
 // 1500 bytes is way overkill for MQTT, but if you have it, may as well
 // make space for a whole TCP packet
@@ -3260,7 +3260,9 @@ void download_one_file(char * filename) {
         if (dataFile) {
             while (dataFile.available()) {
                 last_char_read = dataFile.read();
-                Serial.write(last_char_read);
+                if(isprint(last_char_read) || isspace(last_char_read)) {
+                    Serial.write(last_char_read);
+                }
             }
             dataFile.close();
         }
@@ -3347,16 +3349,20 @@ void fileop_command_delegate(char * arg, void (*one_file_function)(char *)) {
             }
             memset(cur_date_filename, 0, 16);
             make_datetime_filename(cur_date, cur_date_filename, 15);
+
+            if(SD.exists(cur_date_filename)) {}
             one_file_function(cur_date_filename);
-            if(memcmp(cur_date, end_date, 4) == 0) {
-                finished_last_file = true;
-            }
-            else {
-                advanceByOneHour(cur_date);
-            }
         }
-        delayForWatchdog();
+
+        if(memcmp(cur_date, end_date, 4) == 0) {
+            finished_last_file = true;
+        }
+        else {
+            advanceByOneHour(cur_date);
+        }
     }
+    delayForWatchdog();
+}
 }
 
 void download_command(char * arg) {
