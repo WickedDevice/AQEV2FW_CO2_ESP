@@ -63,10 +63,7 @@ SdFat SD;
 
 #define MAX_SAMPLE_BUFFER_DEPTH (180) // 15 minutes @ 5 second resolution
 #define CO2_SAMPLE_BUFFER         (0)
-#define TEMPERATURE_SAMPLE_BUFFER (1)
-#define HUMIDITY_SAMPLE_BUFFER    (2)
-#define PRESSURE_SAMPLE_BUFFER    (3)
-#define NUM_SAMPLE_BUFFERS        (4)
+#define NUM_SAMPLE_BUFFERS        (1)
 SoftwareSerial co2Serial(9, 10);  // RX, TX
 K30 k30(&co2Serial);
 float co2_ppm = 0.0f;
