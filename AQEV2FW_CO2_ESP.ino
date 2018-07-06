@@ -26,7 +26,7 @@
 // semantic versioning - see http://semver.org/
 #define AQEV2FW_MAJOR_VERSION 2
 #define AQEV2FW_MINOR_VERSION 2
-#define AQEV2FW_PATCH_VERSION 3
+#define AQEV2FW_PATCH_VERSION 4
 
 #define WLAN_SEC_AUTO (10) // made up to support auto-config of security
 
@@ -707,6 +707,8 @@ void setup() {
                     Serial.print(countdown_value_display);
                     Serial.print(F("..."));
                 }
+
+
 
                 updateCornerDot();
 
@@ -5554,15 +5556,16 @@ void watchdogForceReset(boolean changeLCD) {
     }
 
     tinywdt.force_reset();
-    Serial.println(F("Error: Watchdog Force Restart failed. Manual reset is required."));
-    setLCD_P(PSTR("AUTORESET FAILED"
-                  " RESET REQUIRED "));
-    backlightOn();
-    ERROR_MESSAGE_DELAY();
 
     for(;;) {
-        soft_restart();
         delay(1000);
+        Serial.println(F("Error: Watchdog Force Restart failed. Manual may be required."));
+        soft_restart();
+
+        setLCD_P(PSTR("AUTORESET FAILED"
+                      " RESET REQUIRED "));
+        backlightOn();
+        ERROR_MESSAGE_DELAY();
     }
 }
 
